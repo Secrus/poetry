@@ -134,7 +134,7 @@ class SitePackages:
         )
 
     def remove_distribution_files(self, distribution_name: str) -> list[Path]:
-        paths = []
+        removed_paths = []
 
         for distribution in self.distributions(
             name=distribution_name, writable_only=True
@@ -149,9 +149,9 @@ class SitePackages:
             if distribution_path.exists():
                 remove_directory(distribution_path, force=True)
 
-            paths.append(distribution_path)
+            removed_paths.append(distribution_path)
 
-        return paths
+        return removed_paths
 
     def _path_method_wrapper(
         self,
