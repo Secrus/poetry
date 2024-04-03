@@ -24,6 +24,7 @@ from requests.models import CONTENT_CHUNK_SIZE
 from requests.models import HTTPError
 from requests.models import Response
 from requests.status_codes import codes
+from poetry.inspection.utils import metadata_regex
 
 
 if TYPE_CHECKING:
@@ -490,8 +491,6 @@ class LazyWheelOverHTTP(LazyFileOverHTTP):
     # multiple times in the same invocation against an index without this support.
     _domains_without_negative_range: ClassVar[set[str]] = set()
 
-    _metadata_regex = re.compile(r"^[^/]*\.dist-info/METADATA$")
-
     def read_metadata(self, name: str) -> bytes:
         """Download and read the METADATA file from the remote wheel."""
         with ZipFile(self) as zf:
@@ -707,14 +706,14 @@ class LazyWheelOverHTTP(LazyFileOverHTTP):
         filename = ""
         for info in zf.infolist():
             if start is None:
-                if self._metadata_regex.search(info.filename):
+                if metadata_regex.search(info.filename):
                     filename = info.filename
                     start = info.header_offset
                     continue
             else:
                 # The last .dist-info/ entry may be before the end of the file if the
                 # wheel's entries are sorted lexicographically (which is unusual).
-                if not self._metadata_regex.search(info.filename):
+                if not metadata_regex.search(info.filename):
                     end = info.header_offset
                     break
         if start is None:
