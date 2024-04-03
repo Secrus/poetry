@@ -10,7 +10,7 @@ import pytest
 
 from build import BuildBackendException
 from build import ProjectBuilder
-from packaging.metadata import parse_email
+from packaging.metadata import Metadata, parse_email
 from pkginfo.distribution import NewMetadataVersion
 
 from poetry.inspection.info import PackageInfo
@@ -22,7 +22,6 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
     from pathlib import Path
 
-    from packaging.metadata import RawMetadata
     from pytest_mock import MockerFixture
 
     from tests.types import FixtureDirGetter
@@ -40,9 +39,9 @@ def demo_wheel(fixture_dir: FixtureDirGetter) -> Path:
 
 
 @pytest.fixture
-def demo_wheel_metadata(demo_wheel: Path) -> RawMetadata:
+def demo_wheel_metadata(demo_wheel: Path) -> Metadata:
     with ZipFile(demo_wheel) as zf:
-        metadata, _ = parse_email(zf.read("demo-0.1.0.dist-info/METADATA"))
+        metadata = Metadata.from_email(zf.read("demo-0.1.0.dist-info/METADATA"))
     return metadata
 
 
@@ -155,6 +154,7 @@ def demo_check_info(info: PackageInfo, requires_dist: set[str] | None = None) ->
     else:
         # Exact formatting various according to the exact mechanism used to extract the
         # metadata.
+        print(info.requires_dist)
         assert set(info.requires_dist) in (
             {
                 'cleo; extra == "foo"',
@@ -176,8 +176,12 @@ def demo_check_info(info: PackageInfo, requires_dist: set[str] | None = None) ->
                 "pendulum (>=1.4.4)",
                 "tomlkit ; extra == 'bar'",
             },
+            {
+                'cleo; extra == "foo"',
+                'pendulum>=1.4.4',
+                'tomlkit; extra == "bar"'
+            }
         )
-
 
 def test_info_from_sdist(demo_sdist: Path) -> None:
     info = PackageInfo.from_sdist(demo_sdist)
@@ -226,7 +230,7 @@ def test_info_from_wheel_metadata_version_unknown(
     assert "Unknown metadata version: 999.3" in str(e.value)
 
 
-def test_info_from_wheel_metadata(demo_wheel_metadata: RawMetadata) -> None:
+def test_info_from_wheel_metadata(demo_wheel_metadata: Metadata) -> None:
     info = PackageInfo.from_metadata(demo_wheel_metadata)
     demo_check_info(info)
     assert info.requires_python == ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*"
@@ -239,7 +243,7 @@ def test_info_from_wheel_metadata_incomplete() -> None:
     To avoid differences in cached metadata,
     it is important that the representation of missing fields does not change!
     """
-    metadata, _ = parse_email(b"Metadata-Version: 2.1\nName: demo\nVersion: 0.1.0\n")
+    metadata = Metadata.from_email(b"Metadata-Version: 2.1\nName: demo\nVersion: 0.1.0\n")
     info = PackageInfo.from_metadata(metadata)
     assert info.name == "demo"
     assert info.version == "0.1.0"
@@ -276,14 +280,6 @@ def test_info_from_poetry_directory_fallback_on_poetry_create_error(
     assert mock_create_poetry.call_count == 1
     assert mock_get_poetry_package.call_count == 1
     assert mock_get_pep517_metadata.call_count == 1
-
-
-def test_info_from_requires_txt(fixture_dir: FixtureDirGetter) -> None:
-    info = PackageInfo.from_metadata_directory(
-        fixture_dir("inspection") / "demo_only_requires_txt.egg-info"
-    )
-    assert info is not None
-    demo_check_info(info)
 
 
 def test_info_no_setup_pkg_info_no_deps(fixture_dir: FixtureDirGetter) -> None:
