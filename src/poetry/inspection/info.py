@@ -27,7 +27,8 @@ from poetry.core.version.requirements import InvalidRequirement
 
 from poetry.utils.helpers import extractall
 from poetry.utils.isolated_build import isolated_builder
-
+from poetry.inspection.utils import metadata_regex, pkg_info_regex, egg_regex
+import packaging.metadata as pm
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -265,9 +266,7 @@ class PackageInfo:
 
         :param dist: The distribution instance to parse information from.
         """
-        if dist.metadata_version not in pkginfo.distribution.HEADER_ATTRS:
-            # This check can be replaced once upstream implements strict parsing
-            # https://bugs.launchpad.net/pkginfo/+bug/2058697
+        if dist.metadata_version not in pm._VALID_METADATA_VERSIONS:
             raise ValueError(f"Unknown metadata version: {dist.metadata_version}")
 
         requirements = cls._requirements_from_distribution(dist)
@@ -285,6 +284,30 @@ class PackageInfo:
 
         return info
 
+    @staticmethod
+    def _read_metadata_from_sdist(path: Path) -> bytes:
+        import zipfile
+        import tarfile
+
+        if zipfile.is_zipfile(path):
+            with zipfile.ZipFile(path) as archive:
+                for file in archive.infolist():
+                    if pkg_info_regex.search(file.filename):
+                        return archive.read(file.filename)
+        elif tarfile.is_tarfile(path):
+            with tarfile.TarFile.open(path) as archive:
+                for name in archive.getnames():
+                    if pkg_info_regex.search(name):
+                        return archive.extractfile(name).read()
+        else:
+            raise ValueError(f"Not a known archive format: {path}")
+
+    @staticmethod
+    def _read_metadata_from_unpacked_sdist(path: Path) -> bytes:
+        if path.is_file():
+            path = path.parent
+        return (path / "PKG-INFO").read_bytes()
+
     @classmethod
     def _from_sdist_file(cls, path: Path) -> PackageInfo:
         """
@@ -297,8 +320,9 @@ class PackageInfo:
         info = None
 
         with contextlib.suppress(ValueError):
-            sdist = pkginfo.SDist(str(path))
-            info = cls._from_distribution(sdist)
+            sdist = cls._read_metadata_from_sdist(path)
+            metadata, _ = pm.parse_email(sdist)
+            info = cls.from_metadata(metadata)
 
         if info is not None and info.requires_dist is not None:
             # we successfully retrieved dependencies from sdist metadata
@@ -383,13 +407,13 @@ class PackageInfo:
         else:
             directories = list(cls._find_dist_info(path=path))
 
-        dist: pkginfo.BDist | pkginfo.SDist | pkginfo.Wheel
+        metadata: bytes
         for directory in directories:
             try:
                 if directory.suffix == ".egg-info":
-                    dist = pkginfo.UnpackedSDist(directory.as_posix())
+                    metadata = cls._read_metadata_from_unpacked_sdist(directory)
                 elif directory.suffix == ".dist-info":
-                    dist = pkginfo.Wheel(directory.as_posix())
+                    metadata = cls._read_metadata_from_wheel(directory)
                 else:
                     continue
                 break
@@ -398,11 +422,12 @@ class PackageInfo:
         else:
             try:
                 # handle PKG-INFO in unpacked sdist root
-                dist = pkginfo.UnpackedSDist(path.as_posix())
+                metadata = cls._read_metadata_from_unpacked_sdist(path)
             except ValueError:
                 return None
 
-        return cls._from_distribution(dist=dist)
+        parsed_metadata, _ = pm.parse_email(metadata)
+        return cls.from_metadata(parsed_metadata)
 
     @classmethod
     def from_package(cls, package: Package) -> PackageInfo:
@@ -481,6 +506,25 @@ class PackageInfo:
         # so, we assume this is an directory
         return cls.from_directory(path=path)
 
+    @staticmethod
+    def _read_metadata_from_wheel(path: Path) -> bytes:
+        if path.suffix == ".whl":
+            import zipfile
+
+            with zipfile.ZipFile(path) as wheel_file:
+                for file in wheel_file.infolist():
+                    if metadata_regex.search(file.filename):
+                        return wheel_file.read(file.filename)
+
+        elif path.suffix == ".dist-info":
+            metadata_path = path / "METADATA"
+            return metadata_path.read_bytes()
+
+        else:
+            raise ValueError(
+                f"Not a known wheel archive format or installed .dist-info: {path}"
+            )
+
     @classmethod
     def from_wheel(cls, path: Path) -> PackageInfo:
         """
@@ -489,8 +533,9 @@ class PackageInfo:
         :param path: Path to wheel.
         """
         try:
-            wheel = pkginfo.Wheel(str(path))
-            return cls._from_distribution(wheel)
+            wheel_metadata = cls._read_metadata_from_wheel(path)
+            metadata, _ = pm.parse_email(wheel_metadata)
+            return cls.from_metadata(metadata)
         except ValueError as e:
             raise PackageInfoError(path, e)
 
@@ -505,8 +550,14 @@ class PackageInfo:
             return cls.from_wheel(path=path)
 
         try:
-            bdist = pkginfo.BDist(str(path))
-            return cls._from_distribution(bdist)
+            import zipfile
+
+            with zipfile.ZipFile(path) as wheel_file:
+                for file in wheel_file.infolist():
+                    if egg_regex.search(file.filename):
+                        metadata = wheel_file.read(file.filename)
+                        parsed_metadata, _ = pm.parse_email(metadata)
+                        return cls.from_metadata(parsed_metadata)
         except ValueError as e:
             raise PackageInfoError(path, e)
 
