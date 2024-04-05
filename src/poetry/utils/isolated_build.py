@@ -112,7 +112,7 @@ def isolated_builder(
     pool: RepositoryPool | None = None,
 ) -> Iterator[ProjectBuilder]:
     from build import ProjectBuilder
-    from pyproject_hooks import quiet_subprocess_runner  # type: ignore[import-untyped]
+    from pyproject_hooks import quiet_subprocess_runner
 
     from poetry.factory import Factory
 
