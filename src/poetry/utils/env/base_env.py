@@ -67,6 +67,10 @@ class Env:
         self._embedded_pip_path: Path | None = None
 
     @property
+    def bin_dir(self) -> Path:
+        return self._bin_dir
+
+    @property
     def path(self) -> Path:
         return self._path
 

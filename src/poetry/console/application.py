@@ -60,7 +60,6 @@ COMMANDS = [
     "remove",
     "run",
     "search",
-    "shell",
     "show",
     "update",
     "version",
@@ -71,6 +70,7 @@ COMMANDS = [
     "debug info",
     "debug resolve",
     # Env commands
+    "env activate",
     "env info",
     "env list",
     "env remove",
