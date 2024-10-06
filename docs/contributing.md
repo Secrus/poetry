@@ -152,7 +152,7 @@ Next, you should install Poetry's dependencies, and run the test suite to make s
 ```bash
 poetry install
 poetry run pytest
-```
+```                             
 
 {{% note %}}
 If you want to see the coverage stats after the tests are complete, use:

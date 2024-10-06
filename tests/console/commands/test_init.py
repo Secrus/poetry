@@ -24,6 +24,7 @@ from tests.helpers import get_package
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
+    from pytest import FixtureRequest
     from poetry.core.packages.package import Package
     from pytest import FixtureRequest
     from pytest_mock import MockerFixture

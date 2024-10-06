@@ -372,8 +372,7 @@ class PackageInfo:
         """
         pattern = "**/*.*-info"
         # Sometimes pathlib will fail on recursive symbolic links, so we need to work
-        # around it and use the glob module instead. Note that this does not happen with
-        # pathlib2 so it's safe to use it for Python < 3.4.
+        # around it and use the glob module instead. This is fixed in Python 3.13+
         directories = glob.iglob(path.joinpath(pattern).as_posix(), recursive=True)
 
         for d in directories:
