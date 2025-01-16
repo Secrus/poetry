@@ -34,7 +34,6 @@ if TYPE_CHECKING:
     from cleo.io.io import IO
     from cleo.io.outputs.output import Output
 
-    from poetry.console.commands.installer_command import InstallerCommand
     from poetry.poetry import Poetry
 
 
@@ -110,7 +109,6 @@ class Application(BaseApplication):
         dispatcher = EventDispatcher()
         dispatcher.add_listener(COMMAND, self.register_command_loggers)
         dispatcher.add_listener(COMMAND, self.configure_env)
-        dispatcher.add_listener(COMMAND, self.configure_installer_for_event)
         self.set_event_dispatcher(dispatcher)
 
         command_loader = CommandLoader({name: load_command(name) for name in COMMANDS})
@@ -389,40 +387,6 @@ class Application(BaseApplication):
             io.write_line(f"Using virtualenv: <comment>{env.path}</>")
 
         command.set_env(env)
-
-    @classmethod
-    def configure_installer_for_event(
-        cls, event: Event, event_name: str, _: EventDispatcher
-    ) -> None:
-        from poetry.console.commands.installer_command import InstallerCommand
-
-        assert isinstance(event, ConsoleCommandEvent)
-        command = event.command
-        if not isinstance(command, InstallerCommand):
-            return
-
-        # If the command already has an installer
-        # we skip this step
-        if command._installer is not None:
-            return
-
-        cls.configure_installer_for_command(command, event.io)
-
-    @staticmethod
-    def configure_installer_for_command(command: InstallerCommand, io: IO) -> None:
-        from poetry.installation.installer import Installer
-
-        poetry = command.poetry
-        installer = Installer(
-            io,
-            command.env,
-            poetry.package,
-            poetry.locker,
-            poetry.pool,
-            poetry.config,
-            disable_cache=poetry.disable_cache,
-        )
-        command.set_installer(installer)
 
     def _load_plugins(self, io: IO) -> None:
         if self._plugins_loaded:

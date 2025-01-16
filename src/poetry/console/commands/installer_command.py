@@ -1,18 +1,14 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from functools import cached_property
 
 from poetry.console.commands.env_command import EnvCommand
 from poetry.console.commands.group_command import GroupCommand
-
-
-if TYPE_CHECKING:
-    from poetry.installation.installer import Installer
+from poetry.installation.installer import Installer
 
 
 class InstallerCommand(GroupCommand, EnvCommand):
     def __init__(self) -> None:
-        # Set in poetry.console.application.Application.configure_installer
         self._installer: Installer | None = None
 
         super().__init__()
@@ -23,10 +19,17 @@ class InstallerCommand(GroupCommand, EnvCommand):
         self.installer.set_package(self.poetry.package)
         self.installer.set_locker(self.poetry.locker)
 
-    @property
+    @cached_property
     def installer(self) -> Installer:
-        assert self._installer is not None
-        return self._installer
+        return Installer(
+            self.io,
+            self.env,
+            self.poetry.package,
+            self.poetry.locker,
+            self.poetry.pool,
+            self.poetry.config,
+            disable_cache=self.poetry.disable_cache,
+        )
 
     def set_installer(self, installer: Installer) -> None:
-        self._installer = installer
+        self.installer = installer
